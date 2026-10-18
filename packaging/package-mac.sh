@@ -1,59 +1,84 @@
 #!/usr/bin/env bash
-# Builds Budgetinator.app and signs it with a self-signed certificate that is generated on
-# first run into ./.signing (gitignored). Output: dist/Budgetinator.app
+# Local release build: ProGuard-shrunk Budgetinator.app + drag-to-Applications DMG in ./dist.
+#
+#   packaging/package-mac.sh            # signs if a "Developer ID Application" identity is in
+#                                       # your login keychain, otherwise builds unsigned
+#   packaging/package-mac.sh --no-sign  # force an unsigned build
+#
+# Optional environment:
+#   MAC_SIGNING_IDENTITY  which identity to use when you have several
+#                         (e.g. "Developer ID Application: Samuel Knight (ABCDE12345)")
+#   NOTARY_PROFILE        a notarytool keychain profile (created once with
+#                         `xcrun notarytool store-credentials <name> ...`); when set, the app and
+#                         DMG are notarized and stapled, like the CI release build.
+#   APP_VERSION           overrides appVersion from gradle.properties
+#
+# Official releases are built by .github/workflows/release.yml; this is for local testing.
 cd "$(dirname "$0")/.."
 
 # sdkman is not -u clean, so load it before enabling strict mode
+# shellcheck source=/dev/null
 source "$HOME/.sdkman/bin/sdkman-init.sh" 2>/dev/null || true
 sdk use java 25.0.1-tem >/dev/null 2>&1 || true
 set -euo pipefail
 
-SIGN_DIR=.signing
-KEYCHAIN="$PWD/$SIGN_DIR/budgetinator.keychain-db"
-KC_PASS=budgetinator   # protects only a throwaway, self-signed key
-CN="Budgetinator Self-Signed"
+SIGN=auto
+[[ "${1:-}" == "--no-sign" ]] && SIGN=no
 
-if [[ ! -f "$KEYCHAIN" ]]; then
-  echo "==> Generating self-signed code-signing certificate"
-  mkdir -p "$SIGN_DIR"; chmod 700 "$SIGN_DIR"
-  cat > "$SIGN_DIR/openssl.cnf" <<EOF
-[req]
-distinguished_name = dn
-x509_extensions = ext
-prompt = no
-[dn]
-CN = $CN
-O = Budgetinator
-[ext]
-basicConstraints = critical,CA:false
-keyUsage = critical,digitalSignature
-extendedKeyUsage = critical,codeSigning
-EOF
-  openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
-    -keyout "$SIGN_DIR/key.pem" -out "$SIGN_DIR/cert.pem" -config "$SIGN_DIR/openssl.cnf"
-  openssl pkcs12 -export -inkey "$SIGN_DIR/key.pem" -in "$SIGN_DIR/cert.pem" \
-    -out "$SIGN_DIR/identity.p12" -passout "pass:$KC_PASS" -name "$CN"
-  security create-keychain -p "$KC_PASS" "$KEYCHAIN"
-  security set-keychain-settings "$KEYCHAIN"            # no auto-lock
-  security unlock-keychain -p "$KC_PASS" "$KEYCHAIN"
-  security import "$SIGN_DIR/identity.p12" -k "$KEYCHAIN" -P "$KC_PASS" -T /usr/bin/codesign
-  security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASS" "$KEYCHAIN" >/dev/null
+VERSION=${APP_VERSION:-$(sed -n 's/^appVersion=//p' gradle.properties)}
+case "$(uname -m)" in arm64) ARCH=arm64 ;; *) ARCH=x64 ;; esac
+
+IDENTITY=""
+if [[ "$SIGN" == auto ]]; then
+  IDENTITY=${MAC_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning |
+    sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p' | head -1)}
 fi
-security unlock-keychain -p "$KC_PASS" "$KEYCHAIN"
 
-echo "==> Building app image"
-./gradlew createDistributable --console=plain -q
-APP_SRC=$(find build/compose/binaries -name 'Budgetinator.app' -maxdepth 4 | head -1)
-[[ -n "$APP_SRC" ]] || { echo "Budgetinator.app not found"; exit 1; }
+GRADLE_ARGS=(createReleaseDistributable "-PappVersion=$VERSION" --console=plain -q)
+if [[ -n "$IDENTITY" ]]; then
+  echo "==> Building $VERSION ($ARCH), signing as: $IDENTITY"
+  GRADLE_ARGS+=(-Pmac.sign=true "-Pmac.signing.identity=$IDENTITY")
+else
+  echo "==> Building $VERSION ($ARCH), unsigned (no Developer ID Application identity found)"
+fi
+./gradlew "${GRADLE_ARGS[@]}"
+
+APP=build/compose/binaries/main-release/app/Budgetinator.app
+[[ -d "$APP" ]] || { echo "Budgetinator.app not found at $APP"; exit 1; }
 
 rm -rf dist; mkdir -p dist
-ditto "$APP_SRC" dist/Budgetinator.app
+ditto "$APP" dist/Budgetinator.app
+APP=dist/Budgetinator.app
+DMG="dist/Budgetinator-$VERSION-$ARCH.dmg"
+ZIP="dist/Budgetinator-$VERSION-$ARCH.zip"
 
-echo "==> Signing"
-HASH=$(security find-certificate -c "$CN" -Z "$KEYCHAIN" | awk '/SHA-1 hash:/ {print $3; exit}')
-# Sign nested code first (dylibs, jspawnhelper, launcher), then the bundle.
-find dist/Budgetinator.app -type f \( -name '*.dylib' -o -name '*.jnilib' -o -perm -111 \) -print0 |
-  xargs -0 -n1 codesign --force --keychain "$KEYCHAIN" --sign "$HASH" --timestamp=none 2>/dev/null || true
-codesign --force --deep --keychain "$KEYCHAIN" --sign "$HASH" --timestamp=none dist/Budgetinator.app
-codesign --verify --deep --strict --verbose=2 dist/Budgetinator.app
-echo "==> Done: dist/Budgetinator.app"
+notarize() {
+  xcrun notarytool submit "$1" --keychain-profile "$NOTARY_PROFILE" --wait
+}
+
+if [[ -n "$IDENTITY" ]]; then
+  codesign --verify --deep --strict --verbose=2 "$APP"
+  if [[ -n "${NOTARY_PROFILE:-}" ]]; then
+    echo "==> Notarizing app"
+    ditto -c -k --keepParent "$APP" dist/notarize.zip
+    notarize dist/notarize.zip
+    rm dist/notarize.zip
+    xcrun stapler staple "$APP"
+  fi
+fi
+
+echo "==> Creating $DMG and $ZIP"
+packaging/make-dmg.sh "$APP" "$DMG"
+ditto -c -k --keepParent "$APP" "$ZIP"
+
+if [[ -n "$IDENTITY" ]]; then
+  codesign --force --timestamp --sign "$IDENTITY" "$DMG"
+  if [[ -n "${NOTARY_PROFILE:-}" ]]; then
+    echo "==> Notarizing DMG"
+    notarize "$DMG"
+    xcrun stapler staple "$DMG"
+    spctl --assess --type execute --verbose=2 "$APP"
+  fi
+fi
+echo "==> Done:"
+ls -lh dist

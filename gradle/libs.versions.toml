@@ -4,6 +4,7 @@ compose-multiplatform = "1.12.2"
 coroutines = "1.10.2"
 serialization = "1.11.0"
 pdfbox = "3.0.8"
+proguard = "7.8.2"
 
 [libraries]
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
