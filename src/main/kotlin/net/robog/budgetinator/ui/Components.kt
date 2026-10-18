@@ -2,7 +2,7 @@ package net.robog.budgetinator.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -13,7 +13,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import net.robog.budgetinator.validation.Issue
@@ -68,6 +82,10 @@ fun Field(
     )
 }
 
+/**
+ * Read-only picker. Keyboard: Tab to focus, Enter/Space/Down to open, Up/Down to move, Enter to choose,
+ * Escape to close (the menu's own key handling covers the last three).
+ */
 @Composable
 fun <T> Dropdown(
     label: String,
@@ -79,20 +97,51 @@ fun <T> Dropdown(
     error: String? = null,
 ) {
     var open by remember { mutableStateOf(false) }
+    var byKeyboard by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    val itemFocus = remember { FocusRequester() }
+    var width by remember { mutableStateOf(0) }
+    fun refocus() = runCatching { focus.requestFocus() }
     Box(modifier) {
         OutlinedTextField(
             value = value?.let(text).orEmpty(),
             onValueChange = {},
             readOnly = true,
+            singleLine = true,
             label = { Text(label) },
             isError = error != null,
             supportingText = error?.let { { Text(it) } },
             trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().focusRequester(focus).onSizeChanged { width = it.width }
+                .onPreviewKeyEvent { e ->
+                    val opens = e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.Spacebar || e.key == Key.DirectionDown
+                    if (opens && e.type == KeyEventType.KeyDown) { byKeyboard = true; open = true }
+                    opens // also swallow the KeyUp so the text field doesn't see it
+                }
+                .semantics { role = Role.DropdownList },
         )
-        Box(Modifier.matchParentSize().padding(bottom = if (error != null) 20.dp else 0.dp).clickable { open = true })
-        DropdownMenu(open, { open = false }) {
-            options.forEach { o -> DropdownMenuItem(text = { Text(text(o)) }, onClick = { onSelect(o); open = false }) }
+        // Mouse: the whole field opens the menu. Not focusable, so Tab lands on the text field only.
+        Box(
+            Modifier.matchParentSize().padding(bottom = if (error != null) 20.dp else 0.dp)
+                .focusProperties { canFocus = false }
+                .pointerInput(Unit) { detectTapGestures { refocus(); byKeyboard = false; open = true } }
+        )
+        DropdownMenu(
+            open, { open = false },
+            Modifier.widthIn(min = with(LocalDensity.current) { width.toDp() }).onPreviewKeyEvent { e ->
+                (e.key == Key.Escape && e.type == KeyEventType.KeyDown).also { if (it) { open = false; refocus() } }
+            },
+        ) {
+            // Opened from the keyboard: start on the current choice (or the first) so arrows/Enter/Escape work at once.
+            val start = options.indexOf(value).coerceAtLeast(0)
+            options.forEachIndexed { i, o ->
+                DropdownMenuItem(
+                    text = { Text(text(o), fontWeight = if (o == value) FontWeight.SemiBold else FontWeight.Normal) },
+                    onClick = { onSelect(o); open = false; refocus() },
+                    modifier = if (i == start) Modifier.focusRequester(itemFocus) else Modifier,
+                )
+            }
+            if (byKeyboard) LaunchedEffect(Unit) { runCatching { itemFocus.requestFocus() } }
         }
     }
 }
@@ -130,4 +179,5 @@ fun Callout(text: String, modifier: Modifier = Modifier, color: Color = Material
     ) { Text(text, Modifier.padding(14.dp), style = MaterialTheme.typography.bodyMedium) }
 }
 
-fun money(v: java.math.BigDecimal): String = "$" + String.format("%,.2f", v)
+/** US dollars regardless of the Mac's region setting (the SGC workbook is in USD). */
+fun money(v: java.math.BigDecimal): String = "$" + String.format(java.util.Locale.US, "%,.2f", v)

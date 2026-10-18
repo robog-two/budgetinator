@@ -52,11 +52,17 @@ additional fundraising sources. Each source needs source, rationale, status (Pen
 Travel/fundraising requests with outside money should list it. "Yes" requires at least one row; "No" with rows
 listed is a contradiction.
 
-**Supporting documentation (step 6)** — images only (Excel can embed PNG/JPG/GIF). Warns when none attached;
-errors when College Services are used and nothing is attached.
+**Supporting documentation (step 6)** — Excel can only embed PNG/JPG/GIF, so `model/DocImporter.kt` converts:
+PDFs are rendered page by page (PDFBox, 150 DPI, max 20 pages), HEIC/TIFF/WebP/CMYK JPEGs go through macOS `sips`,
+and anything over 2000 px is downscaled and re-encoded as JPEG or PNG (whichever is smaller) to keep the workbook
+email-sized. Files can also be dragged onto the page. Warns when none attached; errors when College Services are
+used and nothing is attached.
 
 **Price list** — picking a suggested item fills type/location/price; starred items (cups, plates, napkins,
 cutlery) warn "if included by food provider, not funded"; unit prices above the suggestion warn.
+
+## Logs
+Errors and crashes are written to `~/Library/Logs/Budgetinator/budgetinator.log` (rotated at 1 MB).
 
 ## Known limits
 - The template's E9 cell still says to see the tab "Fundraising"; the sheet is actually named "Additional Funds".

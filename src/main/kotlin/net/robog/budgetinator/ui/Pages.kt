@@ -1,6 +1,9 @@
 package net.robog.budgetinator.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -9,7 +12,12 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.DragData
+import androidx.compose.ui.draganddrop.dragData
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -17,9 +25,19 @@ import androidx.compose.ui.unit.dp
 import net.robog.budgetinator.model.*
 import net.robog.budgetinator.validation.Severity
 import net.robog.budgetinator.validation.Step
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import net.robog.budgetinator.AppLog
+import net.robog.budgetinator.export.XlsxExporter
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
+import java.net.URI
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.PosixFilePermissions
 import javax.imageio.ImageIO
 
 /** Inline error for a header field, shown only once the user has moved past the step. */
@@ -246,21 +264,75 @@ private fun FundingCard(store: BudgetStore, idx: Int, f: FundingSource, showErr:
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun DocsPage(store: BudgetStore, window: Frame) {
     val req = store.request
     var message by remember { mutableStateOf<String?>(null) }
-    PageTitle("Supporting documentation", "Screenshots, quotes and invoices that back up your prices. They are embedded on the Supporting Documentation sheet.")
+    var importing by remember { mutableStateOf(false) }
+    var dragOver by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    fun import(files: List<File>) {
+        if (files.isEmpty() || importing) return
+        importing = true
+        message = null
+        scope.launch {
+            val messages = mutableListOf<String>()
+            for (f in files) {
+                val r = withContext(Dispatchers.IO) { DocImporter.load(f) }
+                store.addDocuments(r.pages)
+                r.message?.let(messages::add)
+            }
+            message = messages.joinToString("\n").ifBlank { null }
+            importing = false
+        }
+    }
+    val dropTarget = remember {
+        object : DragAndDropTarget {
+            override fun onEntered(event: DragAndDropEvent) { dragOver = true }
+            override fun onExited(event: DragAndDropEvent) { dragOver = false }
+            override fun onEnded(event: DragAndDropEvent) { dragOver = false }
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                dragOver = false
+                val files = (event.dragData() as? DragData.FilesList)?.readFiles()
+                    ?.mapNotNull { runCatching { File(URI(it)) }.getOrNull() } ?: return false
+                import(files)
+                return true
+            }
+        }
+    }
+    PageTitle("Supporting documentation", "Screenshots, photos, PDFs, quotes and invoices that back up your prices. They are embedded on the Supporting Documentation sheet.")
     if (req.header.usesCollegeServices == true)
         Callout("You are using College Services — attach their invoices here.", color = Warn).also { Spacer(Modifier.height(12.dp)) }
-    Button({
-        val fd = FileDialog(window, "Choose supporting documentation", FileDialog.LOAD).apply {
-            isMultipleMode = true
-            setFilenameFilter { _, n -> n.lowercase().substringAfterLast('.') in setOf("png", "jpg", "jpeg", "gif") }
-            isVisible = true
+    Surface(
+        Modifier.fillMaxWidth().dragAndDropTarget(
+            shouldStartDragAndDrop = { it.dragData() is DragData.FilesList },
+            target = dropTarget,
+        ),
+        shape = RoundedCornerShape(12.dp),
+        color = if (dragOver) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(if (dragOver) 2.dp else 1.dp,
+            if (dragOver) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Button(enabled = !importing, onClick = {
+                val fd = FileDialog(window, "Choose supporting documentation", FileDialog.LOAD).apply {
+                    isMultipleMode = true
+                    setFilenameFilter { _, n -> n.substringAfterLast('.').lowercase() in DocImporter.EXTENSIONS }
+                    isVisible = true
+                }
+                import(fd.files.toList())
+            }) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(6.dp)); Text("Add files…") }
+            if (importing) {
+                CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
+                Text("Processing…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else Text(
+                "or drag files here. Images (PNG, JPG, HEIC, GIF…) and PDFs; each PDF page becomes an image. " +
+                    "Large photos are shrunk automatically.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        message = fd.files.mapNotNull { store.addDocument(it) }.joinToString("\n").ifBlank { null }
-    }) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(6.dp)); Text("Add images…") }
+    }
     message?.let { Spacer(Modifier.height(8.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
     Spacer(Modifier.height(16.dp))
     if (req.docs.isEmpty()) Text("Nothing attached yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -300,7 +372,8 @@ fun ReviewPage(store: BudgetStore, window: Frame) {
     var result by remember { mutableStateOf<Result<File>?>(null) }
     PageTitle("Review & export", "Check everything, fix anything flagged, then generate the filled-in SGC workbook.")
     SectionCard {
-        Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+        @OptIn(ExperimentalLayoutApi::class)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Stat("Grand total (rounded up)", money(req.grandTotal))
             Stat("Additional funding", money(req.fundingTotal))
             Stat("Items", req.filledItems.size.toString())
@@ -330,26 +403,67 @@ fun ReviewPage(store: BudgetStore, window: Frame) {
         }
     }
     Spacer(Modifier.height(8.dp))
-    Button(
-        enabled = store.errorCount == 0,
-        onClick = {
-            val fd = FileDialog(window, "Save budget request", FileDialog.SAVE).apply {
-                file = defaultFileName(req)
-                isVisible = true
-            }
-            val name = fd.file ?: return@Button
-            val out = File(fd.directory, if (name.endsWith(".xlsx")) name else "$name.xlsx")
-            result = runCatching { net.robog.budgetinator.export.XlsxExporter.export(req, out.toPath()); store.markExported(); out }
-        },
-    ) { Text(if (store.errorCount == 0) "Generate budget request (.xlsx)" else "Fix ${store.errorCount} error(s) to export") }
+    val scope = rememberCoroutineScope()
+    var exporting by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(
+            enabled = store.errorCount == 0 && !exporting,
+            onClick = {
+                val fd = FileDialog(window, "Save budget request", FileDialog.SAVE).apply {
+                    file = defaultFileName(req)
+                    isVisible = true
+                }
+                val name = fd.file ?: return@Button
+                val out = File(fd.directory, if (name.endsWith(".xlsx")) name else "$name.xlsx")
+                val snapshot = req
+                exporting = true
+                result = null
+                scope.launch {
+                    val r = withContext(Dispatchers.IO) { runCatching { exportAtomically(snapshot, out) } }
+                    r.onFailure { AppLog.error("Export to ${out.absolutePath} failed", it) }
+                    // Only the request that was actually written counts as saved.
+                    if (r.isSuccess && store.request == snapshot) store.markExported()
+                    result = r
+                    exporting = false
+                }
+            },
+        ) { Text(if (store.errorCount == 0) "Generate budget request (.xlsx)" else "Fix ${store.errorCount} error(s) to export") }
+        if (exporting) {
+            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
+            Text("Exporting…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
     Spacer(Modifier.height(6.dp))
     Text("Not endorsed by SGC \u2014 please check the final spreadsheet before submitting.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     result?.let { r ->
         Spacer(Modifier.height(12.dp))
         r.onSuccess { Callout("Saved ${it.absolutePath}") }
-            .onFailure { Text("Export failed: ${it.message}", color = MaterialTheme.colorScheme.error) }
+            .onFailure {
+                Text("Export failed: ${it.message ?: it.javaClass.simpleName}. Details were saved to ${AppLog.displayPath}.",
+                    color = MaterialTheme.colorScheme.error)
+            }
     }
+}
+
+/** Writes to a temp file next to [out], then moves it into place, so a failure never clobbers an existing file. */
+private fun exportAtomically(req: BudgetRequest, out: File): File {
+    val target = out.toPath()
+    val dir = target.toAbsolutePath().parent
+    val tmp = Files.createTempFile(dir, ".${out.nameWithoutExtension.take(40)}-", ".xlsx.tmp")
+    try {
+        XlsxExporter.export(req, tmp)
+        // Temp files are created owner-only; give the export normal document permissions.
+        runCatching { Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString("rw-r--r--")) }
+        try {
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING)
+        }
+    } finally {
+        Files.deleteIfExists(tmp)
+    }
+    return out
 }
 
 @Composable

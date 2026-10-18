@@ -8,9 +8,7 @@ import net.robog.budgetinator.validation.Issue
 import net.robog.budgetinator.validation.Severity
 import net.robog.budgetinator.validation.Step
 import net.robog.budgetinator.validation.Validator
-import java.io.ByteArrayInputStream
 import java.io.File
-import javax.imageio.ImageIO
 
 /** Single in-memory source of truth for the wizard. Rows reference each other by id. */
 class BudgetStore {
@@ -137,19 +135,20 @@ class BudgetStore {
     fun removeFunding(id: Long) { request = request.copy(funding = request.funding.filterNot { it.id == id }) }
 
     // ---- documents
-    /** Returns an error message, or null on success. */
+    /**
+     * Converts and attaches [file] (images, HEIC, PDFs; see [DocImporter]). Blocks while converting, so the
+     * UI calls [DocImporter.load] on a background thread and then [addDocuments] instead.
+     * Returns a message for the user, or null on full success.
+     */
     fun addDocument(file: File): String? {
-        val format = when (file.extension.lowercase()) {
-            "png" -> ImageFormat.PNG
-            "jpg", "jpeg" -> ImageFormat.JPEG
-            "gif" -> ImageFormat.GIF
-            else -> return "${file.name}: Excel can only embed PNG, JPG or GIF images. Screenshot or export it as an image first."
-        }
-        if (file.length() > 15L * 1024 * 1024) return "${file.name} is over 15 MB; please shrink it."
-        val bytes = file.readBytes()
-        if (ImageIO.read(ByteArrayInputStream(bytes)) == null) return "${file.name} could not be read as an image."
-        request = request.copy(docs = request.docs + SupportingDoc(id(), file.name, bytes, format))
-        return null
+        val r = DocImporter.load(file)
+        addDocuments(r.pages)
+        return r.message
+    }
+
+    fun addDocuments(pages: List<DocImporter.Page>) {
+        if (pages.isEmpty()) return
+        request = request.copy(docs = request.docs + pages.map { SupportingDoc(id(), it.name, it.bytes, it.format) })
     }
 
     fun updateDoc(id: Long, f: (SupportingDoc) -> SupportingDoc) {
