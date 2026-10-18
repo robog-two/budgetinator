@@ -30,16 +30,61 @@ class BudgetStore {
     val errorCount by derivedStateOf { issues.count { it.severity == Severity.ERROR } }
     val warningCount by derivedStateOf { issues.count { it.severity == Severity.WARNING } }
 
-    /** Snapshot as of the last export (or app start); the request is "unsaved" while it differs. */
-    private var baseline by mutableStateOf(BudgetRequest())
+    // ---- document state (draft save/load, see persist/DraftFile.kt)
 
-    val isDirty: Boolean get() = request != baseline
+    /** The .budget file this request was last saved to / opened from; null for an untitled request. */
+    var currentFile by mutableStateOf<File?>(null)
+        private set
 
-    fun markExported() { baseline = request }
+    /** Snapshot as of the last save/open (or New/app start). */
+    private var savedBaseline by mutableStateOf(BudgetRequest())
+    /** Snapshot as of the last Excel export. */
+    private var exportedBaseline by mutableStateOf(BudgetRequest())
+
+    /** Differs from the draft file on disk: drives the title's "Edited" marker and autosave. */
+    val isEdited: Boolean get() = request != savedBaseline
+
+    /**
+     * Would closing lose work? False right after a save or an export: an exported workbook is
+     * itself a finished copy of the request, so (as before drafts existed) quitting right after
+     * exporting doesn't nag.
+     */
+    val isDirty: Boolean get() = request != savedBaseline && request != exportedBaseline
+
+    fun markExported() { exportedBaseline = request }
+
+    /** Call after [saved] (a snapshot of [request]) was written to [file]. */
+    fun markSaved(file: File, saved: BudgetRequest = request) {
+        currentFile = file
+        savedBaseline = saved
+    }
+
+    /** Fresh, untitled request (File > New). */
+    fun newRequest() {
+        nextId = 1L
+        load(BudgetRequest(items = listOf(LineItem(id()))), step = null, file = null)
+    }
+
+    /**
+     * Replaces everything with [r] (File > Open, crash recovery). [edited] = true keeps it marked
+     * unsaved (a recovered autosave isn't on disk anywhere the user chose).
+     */
+    fun load(r: BudgetRequest, step: Step? = null, file: File? = null, edited: Boolean = false) {
+        val maxId = (r.items.map { it.id } + r.funding.map { it.id } + r.docs.map { it.id }).maxOrNull() ?: 0L
+        nextId = maxOf(nextId, maxId + 1)
+        request = r
+        this.step = step ?: Step.BASICS
+        // A reopened draft shows its validation messages for the steps already worked through.
+        visited = Step.entries.filter { it < this.step }.toSet()
+        currentFile = file
+        savedBaseline = if (edited) BudgetRequest() else r
+        exportedBaseline = savedBaseline
+    }
 
     init {
         request = request.copy(items = listOf(LineItem(id())))
-        baseline = request
+        savedBaseline = request
+        exportedBaseline = request
     }
 
     fun goTo(target: Step) {

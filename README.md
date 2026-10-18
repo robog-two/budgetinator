@@ -15,6 +15,16 @@ Compose Desktop (Kotlin, JDK 25) wizard that fills in the Ithaca College SGC bud
 | Rules | `validation/Validator.kt` | Pure function `BudgetRequest -> List<Issue>`; ERRORs block export, WARNINGs don't |
 | Export | `export/XlsxExporter.kt` | Patches the bundled template's XML in place (no workbook rebuild), so styles, tables, dropdowns, conditional formatting and the embedded instructions are preserved |
 | UI | `ui/` | 6-step wizard: basics, details, items, funding, documents, review/export |
+| Drafts | `persist/`, `ui/Document.kt` | File menu New/Open/Save/Save As (`.budget`), Save / Don't Save / Cancel prompts, autosave + crash recovery |
+
+## Draft files (`.budget`)
+
+A zip holding `request.json` (`formatVersion: 1`; enums stored by constant name; unknown keys ignored, newer
+versions refused with an "update Budgetinator" message) plus each supporting image as a stored entry under
+`docs/`. Writes are atomic (temp file + rename). A few seconds after edits that differ from the last save, a copy
+goes to `~/Library/Application Support/Budgetinator/autosave.budget`; it is deleted on a clean quit or once
+everything is saved, and offered for restore at launch otherwise. Quitting right after an Excel export doesn't
+prompt (the workbook is a finished copy), but the title still shows "Edited" until the draft is saved.
 
 The template is bundled at `src/main/resources/SGC_New_request_template.xlsx` (an unmodified copy).
 
@@ -49,6 +59,5 @@ errors when College Services are used and nothing is attached.
 cutlery) warn "if included by food provider, not funded"; unit prices above the suggestion warn.
 
 ## Known limits
-- No draft save/load yet — closing the window discards the request.
 - The template's E9 cell still says to see the tab "Fundraising"; the sheet is actually named "Additional Funds".
   Left as-is because the template is not to be altered.
