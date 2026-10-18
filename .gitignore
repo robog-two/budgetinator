@@ -1,0 +1,11 @@
+.gradle/
+build/
+.idea/
+*.iml
+.kotlin/
+local.properties
+
+# self-signed code-signing identity + built apps (never commit)
+.signing/
+dist/
+.DS_Store
