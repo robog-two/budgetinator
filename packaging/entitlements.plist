@@ -16,5 +16,8 @@
     <true/>
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
+    <!-- "Send Logs" scripts Apple Mail to attach the log file (LogMailer.kt). -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
 </dict>
 </plist>

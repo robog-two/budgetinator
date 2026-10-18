@@ -205,5 +205,5 @@ Errors and crashes are written to `~/Library/Logs/Budgetinator/budgetinator.log`
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The bundled Carlito font is under the SIL Open Font License 1.1
+Created by Sam Knight. Developed with Claude Code. CC0 / Public Domain — see [LICENSE](LICENSE); the author waives all copyright in the code. The bundled Carlito font is under the SIL Open Font License 1.1
 ([OFL.txt](src/main/resources/fonts/OFL.txt)).

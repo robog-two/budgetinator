@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 import net.robog.budgetinator.AppInfo
+import net.robog.budgetinator.LogMailer
 import net.robog.budgetinator.update.UpdateController
 import net.robog.budgetinator.update.UpdateState
 
@@ -60,6 +61,13 @@ fun AboutDialog(updater: UpdateController, onClose: () -> Unit) {
                         Text(" by an IC student.", style = MaterialTheme.typography.bodyMedium)
                     }
 
+                    Text("Questions or problems? ${LogMailer.TO}", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton({ openUrl("mailto:${LogMailer.TO}?subject=Budgetinator") }) { Text("Email Sam") }
+                        TextButton({ LogMailer.send() }) { Text("Send Logs…") }
+                    }
+
                     UpdateSection(updater, onClose)
 
                     TextButton({ openUrl(AppInfo.repoUrl) }) {
@@ -72,14 +80,13 @@ fun AboutDialog(updater: UpdateController, onClose: () -> Unit) {
                     Text("Licenses", style = MaterialTheme.typography.titleSmall)
                     val small = MaterialTheme.typography.bodySmall
                     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-                    Text("${AppInfo.NAME} is free software released under the MIT License.",
-                        style = small, color = muted, textAlign = TextAlign.Center)
+                    Text(AppInfo.CREDIT, style = small, color = muted, textAlign = TextAlign.Center)
                     Text("Carlito font © Łukasz Dziedzic, licensed under the SIL Open Font License 1.1.",
                         style = small, color = muted, textAlign = TextAlign.Center)
                     Text("Built with Kotlin and Compose Multiplatform (Apache License 2.0).",
                         style = small, color = muted, textAlign = TextAlign.Center)
                     Row {
-                        TextButton({ openUrl(AppInfo.licenseUrl) }) { Text("MIT License", style = MaterialTheme.typography.labelMedium) }
+                        TextButton({ openUrl(AppInfo.licenseUrl) }) { Text("CC0 1.0", style = MaterialTheme.typography.labelMedium) }
                         TextButton({ openUrl(AppInfo.carlitoLicenseUrl) }) { Text("SIL OFL 1.1", style = MaterialTheme.typography.labelMedium) }
                     }
                 }

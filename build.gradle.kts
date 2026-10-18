@@ -109,8 +109,8 @@ compose.desktop {
             packageName = "Budgetinator"
             packageVersion = appVersion
             description = "SGC budget request builder"
-            copyright = "© 2026 Samuel Knight. MIT License."
-            vendor = "Samuel Knight"
+            copyright = "Created by Sam Knight. Developed with Claude Code. CC0 / Public Domain."
+            vendor = "Sam Knight"
             // JDK modules beyond Compose's defaults (from `./gradlew suggestRuntimeModules`);
             // java.net.http is the updater's HttpClient. Re-run that task after adding dependencies.
             modules("java.instrument", "java.net.http", "java.prefs", "jdk.unsupported")
@@ -129,6 +129,13 @@ compose.desktop {
                 // JDK 25 itself requires macOS 12+.
                 minimumSystemVersion = "12.0"
                 iconFile.set(project.file("packaging/AppIcon.icns"))
+                infoPlist {
+                    // Shown in the macOS permission prompt the first time "Send Logs" scripts Apple Mail.
+                    extraKeysRawXml = """
+                        <key>NSAppleEventsUsageDescription</key>
+                        <string>Budgetinator uses Mail to attach its log file when you choose Send Logs.</string>
+                    """.trimIndent()
+                }
 
                 entitlementsFile.set(project.file("packaging/entitlements.plist"))
                 runtimeEntitlementsFile.set(project.file("packaging/entitlements.plist"))

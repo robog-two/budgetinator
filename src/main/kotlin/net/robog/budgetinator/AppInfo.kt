@@ -4,6 +4,7 @@ package net.robog.budgetinator
 object AppInfo {
     const val NAME = "Budgetinator"
     const val BUNDLE_ID = "net.robog.budgetinator"
+    const val CREDIT = "Created by Sam Knight. Developed with Claude Code. CC0 / Public Domain."
     const val REPO_OWNER = "robog-two"
     const val REPO_NAME = "budgetinator"
 

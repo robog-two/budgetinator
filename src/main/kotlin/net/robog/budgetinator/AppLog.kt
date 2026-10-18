@@ -77,17 +77,18 @@ object AppLog {
         lastDialogAt = now
         val text = if (fatal)
             "Budgetinator ran into an unexpected problem and needs to close.\n\n" +
-                "Details were saved to $displayPath.\nPlease include that file if you report the problem."
+                "Details were saved to $displayPath.\nUse \"Email Log\" to send it to ${LogMailer.TO}."
         else
             "Something went wrong, but you can probably keep working.\n\n" +
                 "Details were saved to $displayPath.\nIf things look wrong, export your request and restart the app."
         val show = {
-            val options = arrayOf("OK", "Show Log in Finder")
+            val options = arrayOf("OK", "Show Log in Finder", "Email Log…")
             val choice = JOptionPane.showOptionDialog(
                 null, text, "Budgetinator", JOptionPane.DEFAULT_OPTION, JOptionPane.ERROR_MESSAGE,
                 null, options, options[0],
             )
             if (choice == 1) revealLog()
+            if (choice == 2) LogMailer.send()
         }
         if (SwingUtilities.isEventDispatchThread()) show() else SwingUtilities.invokeLater(show)
     }
