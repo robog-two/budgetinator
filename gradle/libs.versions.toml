@@ -2,6 +2,7 @@
 kotlin = "2.4.21"
 compose-multiplatform = "1.12.2"
 coroutines = "1.10.2"
+proguard = "7.8.2"
 
 [libraries]
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }

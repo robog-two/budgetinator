@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for the launcher and the bundled JDK (used for both
+  entitlementsFile and runtimeEntitlementsFile). The app is not sandboxed, so file and
+  network access need no entitlements.
+    allow-jit / allow-unsigned-executable-memory: HotSpot's JIT writes and runs machine code.
+    disable-library-validation: lets the JVM load the bundled skiko dylib and JDK libs.
+  allow-dyld-environment-variables is deliberately absent; nothing relies on DYLD_* vars.
+-->
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>
