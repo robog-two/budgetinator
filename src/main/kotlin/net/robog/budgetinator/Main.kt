@@ -13,6 +13,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import net.robog.budgetinator.model.BudgetStore
+import net.robog.budgetinator.ui.AppExtras
 import net.robog.budgetinator.ui.BudgetinatorApp
 import java.awt.Desktop
 
@@ -38,6 +39,7 @@ fun main() = application {
         state = rememberWindowState(size = DpSize(1240.dp, 840.dp)),
     ) {
         BudgetinatorApp(window, store)
+        AppExtras(store, quit = ::exitApplication) // About window, update checks
 
         if (confirmQuit) MaterialTheme {
             AlertDialog(

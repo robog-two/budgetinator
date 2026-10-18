@@ -342,6 +342,9 @@ fun ReviewPage(store: BudgetStore, window: Frame) {
             result = runCatching { net.robog.budgetinator.export.XlsxExporter.export(req, out.toPath()); store.markExported(); out }
         },
     ) { Text(if (store.errorCount == 0) "Generate budget request (.xlsx)" else "Fix ${store.errorCount} error(s) to export") }
+    Spacer(Modifier.height(6.dp))
+    Text("Not endorsed by SGC \u2014 please check the final spreadsheet before submitting.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     result?.let { r ->
         Spacer(Modifier.height(12.dp))
         r.onSuccess { Callout("Saved ${it.absolutePath}") }
