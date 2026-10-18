@@ -23,7 +23,7 @@ import net.robog.budgetinator.validation.Step
 import java.awt.Frame
 
 private val SgcBlue = Color(0xFF1167B8)
-private val Scheme = lightColorScheme(
+internal val Scheme = lightColorScheme(
     primary = SgcBlue,
     onPrimary = Color.White,
     primaryContainer = Color(0xFFD6E8FA),
@@ -88,6 +88,10 @@ private fun Sidebar(store: BudgetStore) {
         Spacer(Modifier.weight(1f))
         Text("Running total", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(money(store.request.grandTotal), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        TextButton({ AboutState.open = true }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+            Text("About Budgetinator", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

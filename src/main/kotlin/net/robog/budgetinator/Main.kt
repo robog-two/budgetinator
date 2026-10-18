@@ -8,6 +8,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import net.robog.budgetinator.model.BudgetStore
+import net.robog.budgetinator.ui.AppExtras
 import net.robog.budgetinator.ui.BudgetinatorApp
 import net.robog.budgetinator.ui.DocumentWindow
 import net.robog.budgetinator.ui.rememberDocumentController
@@ -38,6 +39,9 @@ fun main() {
         ) {
             BudgetinatorApp(window, store)
             DocumentWindow(doc, store)
+            // About window + update checks. Quitting for an update skips the autosave cleanup on purpose,
+            // so anything unsaved is offered for restore after the relaunch.
+            AppExtras(store, quit = ::exitApplication)
         }
     }
 }

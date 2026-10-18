@@ -9,3 +9,4 @@ local.properties
 .signing/
 dist/
 .DS_Store
+.claude/
