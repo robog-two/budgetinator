@@ -15,7 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.robog.budgetinator.model.BudgetStore
 import net.robog.budgetinator.validation.Severity
@@ -34,13 +38,16 @@ private val Scheme = lightColorScheme(
 
 @Composable
 fun BudgetinatorApp(window: Frame, store: BudgetStore) {
+    // Narrow windows (down to the 900pt minimum) get a slimmer sidebar and gutters so item rows still fit.
+    val compact = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } < 1100.dp
+    val gutter = if (compact) 24.dp else 40.dp
     MaterialTheme(colorScheme = Scheme) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Row(Modifier.fillMaxSize()) {
-                Sidebar(store)
+                Sidebar(store, if (compact) 210.dp else 260.dp)
                 Column(Modifier.weight(1f).fillMaxHeight()) {
                     Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                        Column(Modifier.widthIn(max = 920.dp).padding(horizontal = 40.dp, vertical = 32.dp).align(Alignment.TopCenter)) {
+                        Column(Modifier.widthIn(max = 920.dp).padding(horizontal = gutter, vertical = 32.dp).align(Alignment.TopCenter)) {
                             when (store.step) {
                                 Step.BASICS -> BasicsPage(store)
                                 Step.DETAILS -> DetailsPage(store)
@@ -51,7 +58,7 @@ fun BudgetinatorApp(window: Frame, store: BudgetStore) {
                             }
                         }
                     }
-                    NavBar(store)
+                    NavBar(store, gutter)
                 }
             }
         }
@@ -59,8 +66,8 @@ fun BudgetinatorApp(window: Frame, store: BudgetStore) {
 }
 
 @Composable
-private fun Sidebar(store: BudgetStore) {
-    Column(Modifier.width(260.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surface).padding(20.dp)) {
+private fun Sidebar(store: BudgetStore, width: Dp) {
+    Column(Modifier.width(width).fillMaxHeight().background(MaterialTheme.colorScheme.surface).padding(20.dp)) {
         Text("Budgetinator", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = SgcBlue)
         Text("SGC budget request", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(28.dp))
@@ -92,17 +99,19 @@ private fun Sidebar(store: BudgetStore) {
 }
 
 @Composable
-private fun NavBar(store: BudgetStore) {
+private fun NavBar(store: BudgetStore, gutter: Dp) {
     val steps = Step.entries
     val i = steps.indexOf(store.step)
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 40.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = gutter, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton({ store.goTo(steps[i - 1]) }, enabled = i > 0) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, null); Spacer(Modifier.width(6.dp)); Text("Back")
             }
-            Spacer(Modifier.weight(1f))
-            if (store.warningCount + store.errorCount > 0)
-                Text("${store.errorCount} to fix · ${store.warningCount} to review", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Box(Modifier.weight(1f).padding(start = 16.dp), contentAlignment = Alignment.CenterEnd) {
+                if (store.warningCount + store.errorCount > 0)
+                    Text("${store.errorCount} to fix · ${store.warningCount} to review", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             Spacer(Modifier.width(16.dp))
             if (i < steps.lastIndex) Button({ store.goTo(steps[i + 1]) }) {
                 Text("Next"); Spacer(Modifier.width(6.dp)); Icon(Icons.AutoMirrored.Filled.ArrowForward, null)

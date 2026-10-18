@@ -18,8 +18,11 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.materialIconsExtended)
     implementation(libs.kotlinx.coroutines.swing)
+    implementation(libs.pdfbox)
 
     testImplementation(libs.kotlin.test)
+    @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+    testImplementation(compose.uiTest)
 }
 
 tasks.test {
