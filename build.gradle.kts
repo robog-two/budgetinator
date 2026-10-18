@@ -111,6 +111,9 @@ compose.desktop {
             description = "SGC budget request builder"
             copyright = "© 2026 Samuel Knight. MIT License."
             vendor = "Samuel Knight"
+            // JDK modules beyond Compose's defaults (from `./gradlew suggestRuntimeModules`);
+            // java.net.http is the updater's HttpClient. Re-run that task after adding dependencies.
+            modules("java.instrument", "java.net.http", "java.prefs", "jdk.unsupported")
 
             // Double-clicking a saved draft in Finder opens it (handler in ui/Document.kt).
             fileAssociation(

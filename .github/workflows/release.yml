@@ -150,6 +150,21 @@ jobs:
           mkdir -p out
           ditto "$APP" out/Budgetinator.app
 
+      - name: Smoke-test the release app
+        # ProGuard and the trimmed Java runtime can break things only the packaged app sees
+        # (e.g. a missing JDK module), so launch it and fail on any logged error.
+        run: |
+          LOG="$HOME/Library/Logs/Budgetinator/budgetinator.log"
+          rm -f "$LOG"
+          out/Budgetinator.app/Contents/MacOS/Budgetinator &
+          PID=$!
+          sleep 20
+          kill -0 "$PID" || { echo "::error::App exited during startup"; cat "$LOG" || true; exit 1; }
+          kill "$PID" || true
+          cat "$LOG" || true
+          grep -q "starting" "$LOG" || { echo "::error::App never logged startup"; exit 1; }
+          if grep -q "ERROR" "$LOG"; then echo "::error::App logged errors on startup"; exit 1; fi
+
       - name: Notarize and staple app
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
